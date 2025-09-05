@@ -1,3 +1,84 @@
+# Windows Virus Error Solved
+
+in Install.ps1 Add With Admin Access
+
+```powershell
+$Host.UI.RawUI.WindowTitle = "Installing MagiskOnWSA...."
+
+function Test-Administrator {
+    [Security.Principal.WindowsPrincipal]::new(
+        [Security.Principal.WindowsIdentity]::GetCurrent()
+    ).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
+}
+
+function Check-Windows11 {
+    (Get-ComputerInfo).OsName -match 11
+}
+
+function Test-CommandExist {
+    param($Command)
+    try { Get-Command $Command -ErrorAction Stop | Out-Null; $true }
+    catch { $false }
+}
+
+function Finish {
+    Start-Process "wsa://com.topjohnwu.magisk"
+    Start-Process "wsa://com.android.vending"
+}
+
+# Run as admin if needed
+if (-not (Test-Administrator)) {
+    Write-Warning "Please run this script as Administrator."
+    exit 1
+}
+
+# Check required feature
+if ((Get-WindowsOptionalFeature -Online -FeatureName 'VirtualMachinePlatform').State -ne "Enabled") {
+    Enable-WindowsOptionalFeature -Online -NoRestart -FeatureName 'VirtualMachinePlatform'
+    Write-Warning "Restart required to enable Virtual Machine Platform."
+    exit 1
+}
+
+# Load manifest
+[xml]$Xml = Get-Content ".\AppxManifest.xml"
+$Name = $Xml.Package.Identity.Name
+$Arch = $Xml.Package.Identity.ProcessorArchitecture
+Write-Output "Installing $Name ($Arch)..."
+
+# Remove existing WSA if needed
+$Installed = Get-AppxPackage -Name $Name
+if ($Installed) {
+    Write-Warning "Existing WSA found. Removing..."
+    Remove-AppxPackage -Package $Installed.PackageFullName
+}
+
+# Stop WSA if running
+if (Test-CommandExist WsaClient) {
+    Start-Process WsaClient -Wait -Args "/shutdown"
+}
+Stop-Process -Name "WsaClient" -ErrorAction SilentlyContinue
+
+# Install new
+Add-AppxPackage -ForceApplicationShutdown -ForceUpdateFromAnyVersion -Register .\AppxManifest.xml
+
+if ($?) {
+    Finish
+    Write-Output "All Done!"
+} else {
+    Write-Error "Installation failed."
+}
+
+```
+
+
+
+
+
+
+
+
+
+
 > [!CAUTION]
 >
 > # It seems that the last few Windows Updates released on many/all of the update channels (issue started from July) are breaking WSA installations for many users! 
